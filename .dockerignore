@@ -1,0 +1,8 @@
+.git
+.terraform
+*.tfstate*
+__pycache__
+*.pyc
+.DS_Store
+iam
+README.md
