@@ -1,0 +1,7 @@
+.DS_Store
+*.zip
+.terraform/
+*.tfstate
+*.tfstate.*
+__pycache__/
+.env
