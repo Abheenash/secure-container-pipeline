@@ -4,13 +4,15 @@ A small containerized API on AWS Fargate, deployed entirely by Terraform, shippe
 
 **Status:** ✅ All stages complete — DevSecOps pipeline **enforced on `main`**, a bad PR proven blocked ([docs/stage5.md](docs/stage5.md)). See the [architecture diagram](docs/architecture.md).
 
-## Screenshots
+## See it in action
 
-> Add PNGs to [`docs/screenshots/`](docs/screenshots/) (see that folder's guide for filenames + links) and they render here.
+The pipeline runs are public — click straight through to the real thing:
 
-| The pipeline blocking a bad PR | The pipeline green on `main` |
-|---|---|
-| ![PR blocked](docs/screenshots/01-pr-blocked.png) | ![pipeline green](docs/screenshots/02-pipeline-green.png) |
+- 🎯 **A hardcoded secret, blocked before merge** — [PR #1](https://github.com/Abheenash/secure-container-pipeline/pull/1) and its [failing run](https://github.com/Abheenash/secure-container-pipeline/actions/runs/28985635630): the **gitleaks** and **trivy** gates both fail, so the credentials can't reach `main`.
+- ✅ **The pipeline passing on `main`** — [green run](https://github.com/Abheenash/secure-container-pipeline/actions/runs/28985555459) (all three gates pass).
+- 🗺️ **[Architecture diagram](docs/architecture.md)** — the pipeline gates and the runtime.
+
+`main` is branch-protected: a PR can't merge until all three gates pass.
 
 ## Why this project
 
