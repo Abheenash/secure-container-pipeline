@@ -15,6 +15,7 @@ resource "aws_security_group" "endpoints" {
     cidr_blocks = [aws_vpc.main.cidr_block]
   }
   egress {
+    description = "responses within the VPC"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -43,9 +44,10 @@ resource "aws_vpc_endpoint" "dynamodb" {
 # Interface endpoints — ECR (api + dkr) to pull the image, logs for CloudWatch.
 locals {
   interface_endpoints = {
-    ecr_api = "com.amazonaws.${var.region}.ecr.api"
-    ecr_dkr = "com.amazonaws.${var.region}.ecr.dkr"
-    logs    = "com.amazonaws.${var.region}.logs"
+    ecr_api        = "com.amazonaws.${var.region}.ecr.api"
+    ecr_dkr        = "com.amazonaws.${var.region}.ecr.dkr"
+    logs           = "com.amazonaws.${var.region}.logs"
+    secretsmanager = "com.amazonaws.${var.region}.secretsmanager"
   }
 }
 

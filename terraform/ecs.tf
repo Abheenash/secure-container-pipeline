@@ -4,11 +4,16 @@ data "aws_ecr_repository" "app" {
 
 resource "aws_cloudwatch_log_group" "app" {
   name              = "/ecs/${var.name_prefix}"
-  retention_in_days = 14
+  retention_in_days = 365
 }
 
 resource "aws_ecs_cluster" "main" {
   name = var.name_prefix
+
+  setting {
+    name  = "containerInsights"
+    value = "enabled"
+  }
 }
 
 # Task security group: only the ALB may reach the container port.
@@ -25,10 +30,11 @@ resource "aws_security_group" "task" {
     security_groups = [aws_security_group.alb.id]
   }
   egress {
+    description = "to VPC endpoints (443); no internet route exists anyway"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"] # to VPC endpoints (443); no internet route exists anyway
+    cidr_blocks = ["0.0.0.0/0"]
   }
   tags = { Name = "${var.name_prefix}-task-sg" }
 }
@@ -53,6 +59,9 @@ resource "aws_ecs_task_definition" "app" {
     environment = [
       { name = "NOTES_TABLE", value = aws_dynamodb_table.notes.name },
       { name = "AWS_REGION", value = var.region }
+    ]
+    secrets = [
+      { name = "APP_SECRET", valueFrom = "${aws_secretsmanager_secret.app.arn}:APP_SECRET::" }
     ]
     logConfiguration = {
       logDriver = "awslogs"

@@ -1,0 +1,59 @@
+name: security-pipeline
+
+# Three hard gates — secrets, IaC misconfig, image/dependency CVEs — that must all
+# pass before code can merge. Insecure code, insecure infra, and leaked secrets are
+# blocked before they reach main.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  secrets-scan:
+    name: gitleaks (secrets)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  iac-scan:
+    name: checkov + tfsec (terraform)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: checkov
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: terraform
+          config_file: .checkov.yaml
+      - name: tfsec
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: terraform
+          # reviewed baseline of accepted findings (public ALB, HTTP-only, AWS-managed keys,
+          # egress for VPC endpoints, no flow logs) — see .checkov.yaml for the rationale
+          additional_args: --exclude aws-cloudwatch-log-group-customer-key,aws-dynamodb-table-customer-key,aws-ec2-no-public-egress-sgr,aws-ec2-no-public-ingress-sgr,aws-ec2-require-vpc-flow-logs-for-all-vpcs,aws-elb-alb-not-public,aws-elb-http-not-used,aws-sns-topic-encryption-use-cmk,aws-ssm-secret-use-customer-key
+
+  image-scan:
+    name: trivy (image + deps)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: build image
+        run: docker build -t scp:ci .
+      - name: trivy
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: scp:ci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
