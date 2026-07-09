@@ -4,6 +4,14 @@ A small containerized API on AWS Fargate, deployed entirely by Terraform, shippe
 
 **Status:** ✅ All stages complete — DevSecOps pipeline **enforced on `main`**, a bad PR proven blocked ([docs/stage5.md](docs/stage5.md)). See the [architecture diagram](docs/architecture.md).
 
+## Screenshots
+
+> Add PNGs to [`docs/screenshots/`](docs/screenshots/) (see that folder's guide for filenames + links) and they render here.
+
+| The pipeline blocking a bad PR | The pipeline green on `main` |
+|---|---|
+| ![PR blocked](docs/screenshots/01-pr-blocked.png) | ![pipeline green](docs/screenshots/02-pipeline-green.png) |
+
 ## Why this project
 
 The app is deliberately boring — the point is the **pipeline and the infrastructure**. This demonstrates a DevSecOps workflow end to end: least-privilege IAM, containers on private subnets, secrets kept out of code, and automated security gates that stop vulnerable code, insecure infrastructure, and leaked secrets *before* they ever reach `main`. Everything is infrastructure-as-code, and CI authenticates to AWS with short-lived **OIDC** credentials — no long-lived keys anywhere.
