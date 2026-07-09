@@ -2,7 +2,7 @@
 
 A small containerized API on AWS Fargate, deployed entirely by Terraform, shipped through a **CI/CD pipeline that refuses to merge insecure code** — Terraform misconfig scanning, container CVE + dependency scanning, and secrets scanning all block the build on findings.
 
-**Status:** 🚧 Building in public — **Stage 1 done** (containerized API on ECR). The roadmap below is the plan; boxes get checked only as each stage actually lands.
+**Status:** 🚧 Building in public — **Stage 2 done** (Terraformed on AWS: Fargate in private subnets behind an ALB, verified end-to-end). The roadmap below is the plan; boxes get checked only as each stage actually lands.
 
 ## Why this project
 
@@ -79,7 +79,7 @@ Fargate tasks run in **private subnets** but still need to reach ECR, Secrets Ma
 
 - [x] **Stage 0** — Repo, reuse account hygiene (IAM admin + MFA, budget alarm), **GitHub OIDC deploy role**, ECR repo, local tooling (Docker, Terraform, `gh`)
 - [x] **Stage 1** — Containerize a minimal API (FastAPI + DynamoDB); run locally; push to ECR by hand
-- [ ] **Stage 2** — Terraform the VPC, Fargate service, ALB, DynamoDB, and VPC endpoints; deploy manually
+- [x] **Stage 2** — Terraform the VPC, Fargate service, ALB, DynamoDB, and VPC endpoints; deploy manually
 - [ ] **Stage 3** — The DevSecOps pipeline: Checkov/tfsec + Trivy + gitleaks as hard gates in GitHub Actions
 - [ ] **Stage 4** — Hardening: Secrets Manager, private subnets / no public DB, least-privilege roles, CloudWatch alarms (optional WAF on the ALB)
 - [ ] **Stage 5** — Clean Terraform, architecture diagram, and a demo of the pipeline blocking a deliberately bad PR
