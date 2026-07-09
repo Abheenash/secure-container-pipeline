@@ -46,6 +46,26 @@ resource "aws_wafv2_web_acl" "main" {
     }
   }
 
+  # Rate limit — block an IP doing more than 2000 requests / 5 min.
+  rule {
+    name     = "rate-limit"
+    priority = 3
+    action {
+      block {}
+    }
+    statement {
+      rate_based_statement {
+        limit              = 2000
+        aggregate_key_type = "IP"
+      }
+    }
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "${var.name_prefix}-rate-limit"
+      sampled_requests_enabled   = true
+    }
+  }
+
   visibility_config {
     cloudwatch_metrics_enabled = true
     metric_name                = "${var.name_prefix}-waf"

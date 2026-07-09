@@ -39,7 +39,7 @@ Developer ──push/PR──> GitHub
                           ▼  terraform apply
      ┌─────────────────────────────────────────────────┐
      │  VPC                                             │
-     │   ├─ public subnets  ── ALB (HTTPS)              │
+     │   ├─ public subnets  ── ALB (HTTP) + WAF         │
      │   └─ private subnets ── ECS Fargate service      │
      │                              │                   │
      │                              ├── DynamoDB (data) │
@@ -51,11 +51,13 @@ Developer ──push/PR──> GitHub
 
 ## How it works
 
-1. A push or PR triggers GitHub Actions, which assumes an AWS role via **OIDC** — no access keys stored anywhere.
-2. Three security gates run: **Checkov/tfsec** on the Terraform, **Trivy** for image CVEs and dependency (SCA) issues, and **gitleaks** for secrets. Any high/critical finding fails the build, so insecure code can't reach `main`.
-3. On success, the image is built and pushed to **ECR** (which re-scans on push), then **Terraform** deploys the service.
+1. A push or PR triggers GitHub Actions, which runs three security gates — **no AWS credentials needed** (the gates only read code).
+2. The gates: **Checkov/tfsec** on the Terraform, **Trivy** for image CVEs and dependency (SCA) issues, and **gitleaks** for secrets. Any HIGH/CRITICAL finding fails the build; `main` is branch-protected, so nothing merges until all three pass.
+3. Deployment is **manual** in this project (`terraform apply`). A future CD job can assume the pre-created **OIDC** role to deploy on merge — no static keys anywhere.
 4. The API runs on **Fargate in private subnets**, reachable only through the ALB. Data lives in **DynamoDB**; secrets come from **Secrets Manager** at runtime — never from the image or an env file.
 5. **CloudWatch** collects logs and alarms on errors.
+
+> **Note on TLS:** the ALB listener is **HTTP** in this demo (no domain/cert provisioned). Adding an ACM cert + HTTP→HTTPS redirect is a documented follow-up; the accepted-for-now finding is recorded in [`.checkov.yaml`](.checkov.yaml).
 
 ## Networking / cost decision
 
@@ -67,7 +69,7 @@ Fargate tasks run in **private subnets** but still need to reach ECR, Secrets Ma
 |---|---|
 | ECS Fargate | Runs the container; no servers to manage |
 | ECR | Image registry; scans images on push |
-| ALB | HTTPS entry point in public subnets |
+| ALB | HTTP entry point in public subnets, fronted by WAF (HTTPS is a documented follow-up) |
 | DynamoDB | App data (on-demand, near-zero cost) |
 | VPC + endpoints | Public/private isolation; private egress without a NAT gateway |
 | Secrets Manager | Runtime secrets, kept out of code and images |
@@ -78,7 +80,7 @@ Fargate tasks run in **private subnets** but still need to reach ECR, Secrets Ma
 
 ## Security decisions
 
-- **CI has no long-lived credentials** — GitHub Actions assumes a scoped role via OIDC federation.
+- **CI has no long-lived credentials** — the security gates need no AWS access at all; the pre-created deploy role uses OIDC federation (scoped to this repo), so a future CD job never needs static keys.
 - **Fail-the-build security gates:** Checkov/tfsec (IaC), Trivy (image CVEs + dependencies), gitleaks (secrets). Findings block the merge.
 - **Defense in depth:** app tasks run in **private subnets**; only the ALB is public; the database is never internet-reachable.
 - **Least privilege:** separate task-execution and task roles, each scoped to only what the container needs.
@@ -94,11 +96,9 @@ Fargate tasks run in **private subnets** but still need to reach ECR, Secrets Ma
 - [x] **Stage 4** — Hardening: Secrets Manager, private subnets / no public DB, least-privilege roles, CloudWatch alarms, WAF on the ALB
 - [x] **Stage 5** — Clean Terraform, [architecture diagram](docs/architecture.md), and a demo of the pipeline [blocking a bad PR](docs/stage5.md)
 
-Screenshots are added as each stage actually lands — including the key one: **a PR blocked by a Trivy/Checkov finding before merge.**
-
 ## Cost
 
-Built to stay cheap: DynamoDB on-demand and Fargate are pay-per-use and near-free at hobby volume. VPC endpoints replace a NAT gateway to avoid ~$32/mo. The **ALB (~$16/mo)** is the one real cost — stand the stack up for demos and screenshots, then `terraform destroy`. A budget alarm guards the account.
+Built to stay cheap: DynamoDB on-demand and Fargate are pay-per-use and near-free at hobby volume. VPC endpoints replace a NAT gateway to avoid ~$32/mo. The real running costs are the **ALB (~$16/mo)** and the **WAF web ACL (~$5/mo + ~$1/managed rule group)** — so stand the stack up for a demo, then `terraform destroy`. A budget alarm guards the account.
 
 ---
 

@@ -49,16 +49,18 @@ resource "aws_ecs_task_definition" "app" {
   task_role_arn            = aws_iam_role.task.arn
 
   container_definitions = jsonencode([{
-    name      = "app"
-    image     = "${data.aws_ecr_repository.app.repository_url}:${var.image_tag}"
-    essential = true
+    name                   = "app"
+    image                  = "${data.aws_ecr_repository.app.repository_url}:${var.image_tag}"
+    essential              = true
+    readonlyRootFilesystem = true # container can't write to its own filesystem
     portMappings = [{
       containerPort = var.container_port
       protocol      = "tcp"
     }]
     environment = [
       { name = "NOTES_TABLE", value = aws_dynamodb_table.notes.name },
-      { name = "AWS_REGION", value = var.region }
+      { name = "AWS_REGION", value = var.region },
+      { name = "PYTHONDONTWRITEBYTECODE", value = "1" } # no .pyc writes under a read-only rootfs
     ]
     secrets = [
       { name = "APP_SECRET", valueFrom = "${aws_secretsmanager_secret.app.arn}:APP_SECRET::" }
