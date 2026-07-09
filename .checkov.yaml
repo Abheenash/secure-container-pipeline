@@ -14,3 +14,11 @@ skip-check:
   - CKV_AWS_119 # DynamoDB uses AWS-managed SSE, not a CMK — acceptable for the demo
   - CKV_AWS_158 # CloudWatch Logs use the AWS-managed key, not a CMK — acceptable for the demo
   - CKV_AWS_149 # Secrets Manager uses the AWS-managed key, not a CMK — acceptable for the demo
+  - CKV_AWS_103 # ALB listener is HTTP (no TLS 1.2) — no domain/cert for the demo
+  - CKV_AWS_378 # target group uses HTTP — internal ALB→task hop; no cert for the demo
+  - CKV2_AWS_20 # no HTTP→HTTPS redirect — demo is HTTP-only
+  - CKV2_AWS_57 # Secrets Manager automatic rotation off — no rotation Lambda in the demo
+  - CKV2_AWS_31 # WAF logging config off — would add Kinesis Firehose/S3; out of scope for demo
+  - CKV2_AWS_11 # VPC flow logs off — would add a log group + role; out of scope for demo
+  - CKV2_AWS_12 # default SG not explicitly restricted — no resources use it; accepted for demo
+  - CKV2_AWS_76 # ALB WAF log4j AMR — WAF has KnownBadInputs; graph check false-positive here
