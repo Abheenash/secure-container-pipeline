@@ -5,3 +5,6 @@
 *.tfstate.*
 __pycache__/
 .env
+
+.pytest_cache/
+__pycache__/

@@ -1,16 +1,22 @@
-# Slim base, no cache, non-root user — small attack surface (and clean Trivy scans).
-FROM python:3.12-slim
-
-WORKDIR /app
-
+# Two stages: dependencies are built once into a wheel cache, then only the runtime
+# bits are copied into a slim image — no compilers, no pip cache, no build leftovers.
+FROM python:3.12-slim AS build
+WORKDIR /build
 COPY app/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
+FROM python:3.12-slim
+WORKDIR /app
+COPY --from=build /install /usr/local
 COPY app/ .
 
-# run as an unprivileged user
-RUN useradd --create-home --uid 10001 appuser
+# Unprivileged, fixed uid (the pipeline asserts it); the task runs with a read-only rootfs.
+RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin appuser
 USER appuser
 
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 EXPOSE 8080
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+# Liveness for docker/compose users; ECS uses the ALB's /health target-group check.
+HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
+  CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2).status == 200 else 1)"
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--no-server-header"]

@@ -4,6 +4,19 @@ A small containerized API on AWS Fargate, deployed entirely by Terraform, shippe
 
 **Status:** ✅ All stages complete — DevSecOps pipeline **enforced on `main`**, a bad PR proven blocked ([docs/stage5.md](docs/stage5.md)). See the [architecture diagram](docs/architecture.md).
 
+## v2 — what changed (Sep 2026)
+
+| Area | Before | Now |
+| --- | --- | --- |
+| Gates | 3 (gitleaks, checkov + tfsec, trivy) | **4** — plus the app's own **pytest suite against a moto-mocked DynamoDB** (9 tests: readiness vs liveness, CRUD, validation, pagination bounds, security headers, JSON request logs, docs disabled). Terraform `fmt`/`validate` also gate. |
+| Supply chain | CVE scan | CVE scan **+ secret scan of the image layers + CycloneDX SBOM** uploaded as a build artifact **+ non-root assertion** (the pipeline fails if the container doesn't run as uid 10001) |
+| Delivery | manual `terraform apply` | a **CD job** on `main` (gated by a `DEPLOY_ENABLED` repo variable so the torn-down demo doesn't fail): OIDC → ECR push (amd64) → **keyless cosign signature by digest** → verify → `ecs update-service`. Dependabot for pip, Docker, Actions and Terraform. |
+| App | `/health` used for everything | `/health` = liveness (never touches AWS); **`/ready` = DynamoDB reachable** and is what the ALB target group checks. Input bounds (1–4000 chars), cursor pagination with a 100-item cap, `DELETE`, security headers, one JSON log line per request with the ALB trace id. OpenAPI/docs endpoints disabled. |
+| Image | single stage | **two-stage build**, `HEALTHCHECK`, `--no-server-header`, `.dockerignore`, `PYTHONUNBUFFERED`. Trivy: 0 HIGH/CRITICAL. |
+| Runtime | fixed desired count | **deployment circuit breaker with automatic rollback**, 100/200 rollout, **CPU target-tracking autoscaling** (1–4 tasks), and **optional TLS**: set `certificate_arn` and the ALB serves HTTPS (TLS 1.3 policy) with an HTTP→HTTPS 301 — the HTTP-only baseline entries in `.checkov.yaml` only apply when no cert is configured. |
+
+Validated with `terraform validate`, `checkov` (81 passed, 0 failed against the reviewed baseline), a local `docker build` + Trivy scan, and the test suite. The infrastructure changes are **not applied** — the stack is torn down between demos by design; `terraform plan` shows them.
+
 ## See it in action
 
 The pipeline runs are public — click straight through to the real thing:
@@ -12,7 +25,7 @@ The pipeline runs are public — click straight through to the real thing:
 - ✅ **The pipeline passing on `main`** — [green run](https://github.com/Abheenash/secure-container-pipeline/actions/runs/28985555459) (all three gates pass).
 - 🗺️ **[Architecture diagram](docs/architecture.md)** — the pipeline gates and the runtime.
 
-`main` is branch-protected: a PR can't merge until all three gates pass.
+`main` is branch-protected: a PR can't merge until all four gates pass.
 
 ## Why this project
 

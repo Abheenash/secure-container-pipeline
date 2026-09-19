@@ -29,3 +29,19 @@ variable "alarm_email" {
   type        = string
   default     = ""
 }
+
+variable "certificate_arn" {
+  description = "ACM certificate ARN. When set, the ALB serves HTTPS and redirects HTTP -> HTTPS; empty = HTTP-only demo."
+  type        = string
+  default     = ""
+}
+
+variable "min_count" {
+  type    = number
+  default = 1
+}
+
+variable "max_count" {
+  type    = number
+  default = 4
+}

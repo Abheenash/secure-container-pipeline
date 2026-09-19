@@ -1,8 +1,9 @@
 .git
-.terraform
-*.tfstate*
-__pycache__
-*.pyc
-.DS_Store
+.github
+tests
+terraform
+docs
 iam
-README.md
+*.md
+__pycache__
+.pytest_cache

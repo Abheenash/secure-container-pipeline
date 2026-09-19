@@ -1,8 +1,9 @@
 name: security-pipeline
 
-# Three hard gates — secrets, IaC misconfig, image/dependency CVEs — that must all
-# pass before code can merge. Insecure code, insecure infra, and leaked secrets are
-# blocked before they reach main.
+# Four hard gates — secrets, IaC misconfig, image/dependency CVEs, and the app's own
+# tests — that must all pass before code can merge. Then, on main, the image is built
+# once, its SBOM is attached as an artifact, and (when DEPLOY_ENABLED=true) it is pushed
+# to ECR and signed keylessly with Sigstore cosign via GitHub's OIDC identity.
 
 on:
   pull_request:
@@ -38,12 +39,25 @@ jobs:
         uses: aquasecurity/tfsec-action@v1.0.3
         with:
           working_directory: terraform
-          # reviewed baseline of accepted findings (public ALB, HTTP-only, AWS-managed keys,
-          # egress for VPC endpoints, no flow logs) — see .checkov.yaml for the rationale
+          # reviewed baseline of accepted findings (public ALB, HTTP-only unless a cert is
+          # supplied, AWS-managed keys, egress for VPC endpoints, no flow logs) — see .checkov.yaml
           additional_args: --exclude aws-cloudwatch-log-group-customer-key,aws-dynamodb-table-customer-key,aws-ec2-no-public-egress-sgr,aws-ec2-no-public-ingress-sgr,aws-ec2-require-vpc-flow-logs-for-all-vpcs,aws-elb-alb-not-public,aws-elb-http-not-used,aws-sns-topic-encryption-use-cmk,aws-ssm-secret-use-customer-key
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform -chdir=terraform fmt -check -diff
+      - run: terraform -chdir=terraform init -backend=false && terraform -chdir=terraform validate
+
+  unit-tests:
+    name: pytest (app, mocked DynamoDB)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r app/requirements.txt -r tests/requirements.txt
+      - run: python -m pytest tests -q
 
   image-scan:
-    name: trivy (image + deps)
+    name: trivy (image + deps) + SBOM
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -51,5 +65,57 @@ jobs:
         run: docker build -t scp:ci .
       - name: install trivy
         run: curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
-      - name: trivy image + dependency scan
+      - name: trivy image + dependency scan (HIGH/CRITICAL, fixed only)
         run: trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --format table scp:ci
+      - name: trivy secret scan of the image layers
+        run: trivy image --scanners secret --exit-code 1 scp:ci
+      - name: generate SBOM (CycloneDX)
+        run: trivy image --format cyclonedx --output sbom.cdx.json scp:ci
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.cdx.json
+      - name: image must run as non-root
+        run: |
+          uid=$(docker run --rm --entrypoint id scp:ci -u)
+          test "$uid" = "10001" || { echo "container runs as uid $uid, expected 10001"; exit 1; }
+
+  # Continuous delivery — wired end to end, enabled with the repository variable
+  # DEPLOY_ENABLED=true (the stack is normally torn down between demos, so the job
+  # is idle by default). Assumes the OIDC deploy role: no long-lived AWS keys anywhere.
+  deploy:
+    name: push to ECR + cosign sign (main only)
+    if: github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
+    needs: [secrets-scan, iac-scan, unit-tests, image-scan]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write   # OIDC for both AWS and Sigstore
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
+      - name: build and push (amd64 — Fargate's architecture)
+        id: push
+        env:
+          REPO: ${{ steps.ecr.outputs.registry }}/secure-container-pipeline
+        run: |
+          docker build --platform linux/amd64 -t "$REPO:${GITHUB_SHA::12}" .
+          docker push "$REPO:${GITHUB_SHA::12}"
+          echo "digest=$(docker inspect --format='{{index .RepoDigests 0}}' "$REPO:${GITHUB_SHA::12}")" >> "$GITHUB_OUTPUT"
+      - uses: sigstore/cosign-installer@v3
+      - name: sign the image by digest (keyless, GitHub OIDC identity)
+        run: cosign sign --yes "${{ steps.push.outputs.digest }}"
+      - name: verify the signature we just made
+        run: |
+          cosign verify "${{ steps.push.outputs.digest }}" \
+            --certificate-identity-regexp "https://github.com/${{ github.repository }}/" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com
+      - name: roll the service to the new image
+        run: |
+          aws ecs update-service --cluster secure-container-pipeline --service secure-container-pipeline \
+            --force-new-deployment --query 'service.deployments[0].{status:status,rollout:rolloutState}'

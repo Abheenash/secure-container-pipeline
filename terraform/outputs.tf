@@ -1,6 +1,6 @@
 output "alb_url" {
   description = "Public URL of the service."
-  value       = "http://${aws_lb.main.dns_name}"
+  value       = "${var.certificate_arn == "" ? "http" : "https"}://${aws_lb.main.dns_name}"
 }
 
 output "notes_table" {

@@ -95,6 +95,45 @@ resource "aws_ecs_service" "app" {
     container_port   = var.container_port
   }
 
+  # A bad image (crash loop, failing /ready) stops the rollout and rolls back to the
+  # last healthy task definition automatically — no human needed at 3 am.
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
+  deployment_minimum_healthy_percent = 100
+  deployment_maximum_percent         = 200
+
   health_check_grace_period_seconds = 60
   depends_on                        = [aws_lb_listener.http]
+
+  lifecycle {
+    ignore_changes = [desired_count] # autoscaling owns it after the first apply
+  }
+}
+
+# --- autoscaling: CPU target tracking between min_count and max_count -----------
+resource "aws_appautoscaling_target" "app" {
+  service_namespace  = "ecs"
+  resource_id        = "service/${aws_ecs_cluster.main.name}/${aws_ecs_service.app.name}"
+  scalable_dimension = "ecs:service:DesiredCount"
+  min_capacity       = var.min_count
+  max_capacity       = var.max_count
+}
+
+resource "aws_appautoscaling_policy" "cpu" {
+  name               = "${var.name_prefix}-cpu-target"
+  service_namespace  = aws_appautoscaling_target.app.service_namespace
+  resource_id        = aws_appautoscaling_target.app.resource_id
+  scalable_dimension = aws_appautoscaling_target.app.scalable_dimension
+  policy_type        = "TargetTrackingScaling"
+
+  target_tracking_scaling_policy_configuration {
+    target_value       = 60
+    scale_in_cooldown  = 120
+    scale_out_cooldown = 60
+    predefined_metric_specification {
+      predefined_metric_type = "ECSServiceAverageCPUUtilization"
+    }
+  }
 }
