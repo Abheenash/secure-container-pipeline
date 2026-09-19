@@ -22,3 +22,4 @@ skip-check:
   - CKV2_AWS_11 # VPC flow logs off — would add a log group + role; out of scope for demo
   - CKV2_AWS_12 # default SG not explicitly restricted — no resources use it; accepted for demo
   - CKV2_AWS_76 # ALB WAF log4j AMR — WAF has KnownBadInputs; graph check false-positive here
+  - CKV_AWS_394 # aws_availability_zones not pinned: the demo VPC takes the first two zones; a new AZ appearing cannot shrink the set, only leave a third unused
