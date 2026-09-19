@@ -18,7 +18,7 @@ jobs:
     name: gitleaks (secrets)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: gitleaks/gitleaks-action@v2
@@ -29,7 +29,7 @@ jobs:
     name: checkov + tfsec (terraform)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: checkov
         uses: bridgecrewio/checkov-action@v12
         with:
@@ -50,7 +50,7 @@ jobs:
     name: pytest (app, mocked DynamoDB)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
       - run: pip install -r app/requirements.txt -r tests/requirements.txt
@@ -60,7 +60,7 @@ jobs:
     name: trivy (image + deps) + SBOM
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: build image
         run: docker build -t scp:ci .
       - name: install trivy
@@ -92,7 +92,7 @@ jobs:
       contents: read
       id-token: write   # OIDC for both AWS and Sigstore
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
