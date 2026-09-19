@@ -71,7 +71,7 @@ jobs:
         run: trivy image --scanners secret --exit-code 1 scp:ci
       - name: generate SBOM (CycloneDX)
         run: trivy image --format cyclonedx --output sbom.cdx.json scp:ci
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: sbom
           path: sbom.cdx.json
