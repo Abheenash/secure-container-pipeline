@@ -45,3 +45,23 @@ variable "max_count" {
   type    = number
   default = 4
 }
+
+variable "deployment_strategy" {
+  description = "rolling = ECS rolling update with circuit-breaker rollback (default). blue_green = CodeDeploy blue/green with traffic shifting and alarm-triggered rollback."
+  type        = string
+  default     = "rolling"
+  validation {
+    condition     = contains(["rolling", "blue_green"], var.deployment_strategy)
+    error_message = "deployment_strategy must be rolling or blue_green."
+  }
+}
+
+variable "traffic_shift" {
+  description = "CodeDeploy traffic-shifting config for blue_green: canary (10% for 5 min, then all), linear (10% every minute), or all_at_once."
+  type        = string
+  default     = "canary"
+  validation {
+    condition     = contains(["canary", "linear", "all_at_once"], var.traffic_shift)
+    error_message = "traffic_shift must be canary, linear or all_at_once."
+  }
+}

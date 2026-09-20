@@ -106,3 +106,9 @@ def test_every_request_is_logged_as_json(client):
     assert lines
     rec = json.loads(lines[-1])
     assert rec["method"] == "POST" and rec["path"] == "/notes" and rec["status"] == 201 and "ms" in rec
+
+
+def test_fail_ready_flag_makes_readiness_fail_but_not_liveness(client, monkeypatch):
+    monkeypatch.setattr(main, "FAIL_READY", True)
+    assert client.get("/ready").status_code == 503
+    assert client.get("/health").status_code == 200

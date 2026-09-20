@@ -28,6 +28,9 @@ from pydantic import BaseModel, Field
 TABLE = os.environ.get("NOTES_TABLE", "secure-container-pipeline-notes")
 REGION = os.environ.get("AWS_REGION", "us-east-1")
 MAX_TEXT = int(os.environ.get("MAX_TEXT", "4000"))
+# Drill switch (deploy/bad-release-drill.md): a release with FAIL_READY=1 reports not-ready
+# while staying alive — the shape of a dependency outage — so the rollback can be seen to fire.
+FAIL_READY = os.environ.get("FAIL_READY", "") == "1"
 
 app = FastAPI(title="secure-container-pipeline notes API", docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -80,6 +83,9 @@ def health():
 
 @app.get("/ready")
 def ready(response: Response):
+    if FAIL_READY:
+        response.status_code = 503
+        return {"status": "not ready", "reason": "FAIL_READY drill flag"}
     try:
         _table().load()  # DescribeTable through the VPC endpoint: cheap, and proves the path
         return {"status": "ready", "table": TABLE}

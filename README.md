@@ -15,7 +15,9 @@ A small containerized API on AWS Fargate, deployed entirely by Terraform, shippe
 | Image | single stage | **two-stage build**, `HEALTHCHECK`, `--no-server-header`, `.dockerignore`, `PYTHONUNBUFFERED`. Trivy: 0 HIGH/CRITICAL. |
 | Runtime | fixed desired count | **deployment circuit breaker with automatic rollback**, 100/200 rollout, **CPU target-tracking autoscaling** (1–4 tasks), and **optional TLS**: set `certificate_arn` and the ALB serves HTTPS (TLS 1.3 policy) with an HTTP→HTTPS 301 — the HTTP-only baseline entries in `.checkov.yaml` only apply when no cert is configured. |
 
-Validated with `terraform validate`, `checkov` (81 passed, 0 failed against the reviewed baseline), a local `docker build` + Trivy scan, and the test suite. The infrastructure changes are **not applied** — the stack is torn down between demos by design; `terraform plan` shows them.
+| Deployment strategy | rolling only | **`deployment_strategy = "blue_green"`** switches the service to **CodeDeploy blue/green**: a green target group, a VPC-internal **test listener (:9001)** to validate a release before it takes traffic, **canary / linear / all-at-once** traffic shifting, and **automatic rollback when `alb-5xx`, `unhealthy-hosts` or a green-only `green-5xx` alarm trips** during the shift — blue stays warm for 30 minutes so a late rollback is a listener flip. `deploy/appspec.yaml`, `scripts/deploy-bluegreen.sh`, and a written **bad-release drill** (`deploy/bad-release-drill.md`) using the app's `FAIL_READY=1` switch, which makes readiness fail while liveness stays up — the shape of a dependency outage. |
+
+Validated with `terraform validate` (both strategies), `checkov` (104 passed, 0 failed against the reviewed baseline), a local `docker build` + Trivy scan, and the test suite. The infrastructure changes are **not applied** — the stack is torn down between demos by design; `terraform plan` shows them. The blue/green rollback drill is written, not yet run.
 
 ## See it in action
 

@@ -76,7 +76,10 @@ resource "aws_ecs_task_definition" "app" {
   }])
 }
 
+# Rolling deployments: ECS replaces tasks in place behind one target group; the
+# circuit breaker rolls back a release whose tasks never become healthy.
 resource "aws_ecs_service" "app" {
+  count           = var.deployment_strategy == "rolling" ? 1 : 0
   name            = var.name_prefix
   cluster         = aws_ecs_cluster.main.id
   task_definition = aws_ecs_task_definition.app.arn
@@ -115,7 +118,7 @@ resource "aws_ecs_service" "app" {
 # --- autoscaling: CPU target tracking between min_count and max_count -----------
 resource "aws_appautoscaling_target" "app" {
   service_namespace  = "ecs"
-  resource_id        = "service/${aws_ecs_cluster.main.name}/${aws_ecs_service.app.name}"
+  resource_id        = "service/${aws_ecs_cluster.main.name}/${local.service_name}"
   scalable_dimension = "ecs:service:DesiredCount"
   min_capacity       = var.min_count
   max_capacity       = var.max_count
@@ -136,4 +139,8 @@ resource "aws_appautoscaling_policy" "cpu" {
       predefined_metric_type = "ECSServiceAverageCPUUtilization"
     }
   }
+}
+
+locals {
+  service_name = var.deployment_strategy == "rolling" ? aws_ecs_service.app[0].name : aws_ecs_service.app_bg[0].name
 }
