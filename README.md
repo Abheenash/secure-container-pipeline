@@ -1,5 +1,7 @@
 # Secure Container Pipeline — a hardened container service shipped through a security-gated CI/CD pipeline on AWS
 
+> **Sep 2026:** fourth gate (pytest + mocked DynamoDB), SBOM, keyless cosign signing in a gated CD job, `/ready` vs `/health`, circuit-breaker rollback, autoscaling, optional TLS, and CodeDeploy blue/green with alarm-triggered rollback (validated, not applied).
+
 A small containerized API on AWS Fargate, deployed entirely by Terraform, shipped through a **CI/CD pipeline that refuses to merge insecure code** — Terraform misconfig scanning, container CVE + dependency scanning, and secrets scanning all block the build on findings.
 
 **Status:** ✅ All stages complete — DevSecOps pipeline **enforced on `main`**, a bad PR proven blocked ([docs/stage5.md](docs/stage5.md)). See the [architecture diagram](docs/architecture.md).
