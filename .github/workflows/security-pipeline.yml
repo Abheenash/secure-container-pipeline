@@ -51,7 +51,7 @@ jobs:
           # reviewed baseline of accepted findings (public ALB, HTTP-only unless a cert is
           # supplied, AWS-managed keys, egress for VPC endpoints, no flow logs) — see .checkov.yaml
           additional_args: --exclude aws-cloudwatch-log-group-customer-key,aws-dynamodb-table-customer-key,aws-ec2-no-public-egress-sgr,aws-ec2-no-public-ingress-sgr,aws-ec2-require-vpc-flow-logs-for-all-vpcs,aws-elb-alb-not-public,aws-elb-http-not-used,aws-sns-topic-encryption-use-cmk,aws-ssm-secret-use-customer-key
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
       - run: terraform -chdir=terraform fmt -check -diff
       - run: terraform -chdir=terraform init -backend=false && terraform -chdir=terraform validate
 
@@ -201,7 +201,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
         with: { terraform_wrapper: false }
       - name: terraform test
         working-directory: ${{ github.workspace }}/terraform
