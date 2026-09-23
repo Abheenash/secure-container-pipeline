@@ -11,6 +11,16 @@ COPY --from=build /install /usr/local
 COPY app/ .
 
 # Unprivileged, fixed uid (the pipeline asserts it); the task runs with a read-only rootfs.
+# Strip pip (and its vendored setuptools/wheel) from the RUNTIME image. A
+# production container has no business carrying a package installer — and pip
+# VENDORS its own msgpack and setuptools, which is where trivy found
+# GHSA-6v7p-g79w-8964 and CVE-2025-47273 in the sibling repos. Upgrading our own
+# dependencies does nothing for pip's vendored ones; only removing pip does.
+RUN rm -rf /usr/local/lib/python3.12/site-packages/pip* \
+           /usr/local/lib/python3.12/site-packages/setuptools* \
+           /usr/local/lib/python3.12/site-packages/wheel* \
+           /usr/local/bin/pip*
+
 RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin appuser
 USER appuser
 
