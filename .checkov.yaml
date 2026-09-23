@@ -3,6 +3,11 @@
 # category of misconfiguration in a PR fails the build.
 directory:
   - terraform
+# This repo's own policy-as-code, run alongside checkov's built-ins. Declared here
+# rather than as a CI flag so `checkov -d terraform` locally gates exactly what CI
+# gates — a policy only CI knows about is a policy that surprises you in a PR.
+external-checks-dir:
+  - policies
 compact: true
 quiet: true
 skip-check:

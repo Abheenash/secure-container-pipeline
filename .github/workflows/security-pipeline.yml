@@ -18,7 +18,7 @@ jobs:
     name: gitleaks (secrets)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: gitleaks/gitleaks-action@v2
@@ -29,8 +29,12 @@ jobs:
     name: checkov + tfsec (terraform)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: checkov
+      - uses: actions/checkout@v7
+      # external-checks-dir loads policies/ — this repo's own policy-as-code, on
+      # top of checkov's built-ins. CKV_SCP_1 exists because the pipeline used to
+      # assert the image's uid but nothing asserted the task definition couldn't
+      # override it back to root.
+      - name: checkov (built-in + this repo's policies)
         uses: bridgecrewio/checkov-action@v12
         with:
           directory: terraform
@@ -50,9 +54,9 @@ jobs:
     name: pytest (app, mocked DynamoDB)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
-        with: { python-version: "3.12" }
+        with: { python-version: "3.13" }
       - run: pip install -r app/requirements.txt -r tests/requirements.txt
       - run: python -m pytest tests -q
 
@@ -60,18 +64,27 @@ jobs:
     name: trivy (image + deps) + SBOM
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: build image
         run: docker build -t scp:ci .
-      - name: install trivy
-        run: curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
+      # Pinned, not @main. The trivy supply chain was compromised twice in March
+      # 2026 (CVE-2026-33634): mutable tags and the install script on a moving
+      # branch were the delivery path. v0.69.3 is the last release before the
+      # malicious v0.69.4/.5/.6; the script is fetched at that same tag.
+      - name: install trivy (pinned)
+        env:
+          TRIVY_VERSION: v0.69.3
+        run: |
+          curl -sfL "https://raw.githubusercontent.com/aquasecurity/trivy/${TRIVY_VERSION}/contrib/install.sh" \
+            | sudo sh -s -- -b /usr/local/bin "${TRIVY_VERSION#v}"
+          trivy --version
       - name: trivy image + dependency scan (HIGH/CRITICAL, fixed only)
         run: trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --format table scp:ci
       - name: trivy secret scan of the image layers
         run: trivy image --scanners secret --exit-code 1 scp:ci
       - name: generate SBOM (CycloneDX)
         run: trivy image --format cyclonedx --output sbom.cdx.json scp:ci
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: sbom
           path: sbom.cdx.json
@@ -90,9 +103,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write   # OIDC for both AWS and Sigstore
+      id-token: write      # OIDC for AWS, Sigstore and the attestation signer
+      attestations: write  # required by actions/attest-*
+      packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
@@ -106,7 +121,10 @@ jobs:
         run: |
           docker build --platform linux/amd64 -t "$REPO:${GITHUB_SHA::12}" .
           docker push "$REPO:${GITHUB_SHA::12}"
-          echo "digest=$(docker inspect --format='{{index .RepoDigests 0}}' "$REPO:${GITHUB_SHA::12}")" >> "$GITHUB_OUTPUT"
+          DIGEST_REF="$(docker inspect --format='{{index .RepoDigests 0}}' "$REPO:${GITHUB_SHA::12}")"
+          echo "digest=$DIGEST_REF" >> "$GITHUB_OUTPUT"
+          # attest-* want the bare sha256:... , cosign wants the full repo@sha256:...
+          echo "digest_only=${DIGEST_REF#*@}" >> "$GITHUB_OUTPUT"
       - uses: sigstore/cosign-installer@v3
       - name: sign the image by digest (keyless, GitHub OIDC identity)
         run: cosign sign --yes "${{ steps.push.outputs.digest }}"
@@ -115,6 +133,39 @@ jobs:
           cosign verify "${{ steps.push.outputs.digest }}" \
             --certificate-identity-regexp "https://github.com/${{ github.repository }}/" \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com
+
+      # A signature proves "this repo's workflow signed this digest". Provenance
+      # proves *how* it was built — which workflow file, which commit, which
+      # runner — in the in-toto SLSA format a consumer can check policy against.
+      # Signing without provenance is the half of supply-chain security that is
+      # easy to demo; this is the half that actually answers "where did this
+      # image come from?".
+      - name: attest build provenance (SLSA, in-toto)
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-name: ${{ steps.ecr.outputs.registry }}/secure-container-pipeline
+          subject-digest: ${{ steps.push.outputs.digest_only }}
+          push-to-registry: true
+
+      - name: install trivy (pinned) for the release SBOM
+        env:
+          TRIVY_VERSION: v0.69.3
+        run: |
+          curl -sfL "https://raw.githubusercontent.com/aquasecurity/trivy/${TRIVY_VERSION}/contrib/install.sh" \
+            | sudo sh -s -- -b /usr/local/bin "${TRIVY_VERSION#v}"
+
+      - name: regenerate the SBOM for the pushed image
+        run: |
+          trivy image --format cyclonedx --output sbom.release.cdx.json "${{ steps.push.outputs.digest }}"
+
+      - name: attest the SBOM
+        uses: actions/attest-sbom@v3
+        with:
+          subject-name: ${{ steps.ecr.outputs.registry }}/secure-container-pipeline
+          subject-digest: ${{ steps.push.outputs.digest_only }}
+          sbom-path: sbom.release.cdx.json
+          push-to-registry: true
+
       - name: roll the service to the new image
         run: |
           aws ecs update-service --cluster secure-container-pipeline --service secure-container-pipeline \

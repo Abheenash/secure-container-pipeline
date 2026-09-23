@@ -1,5 +1,7 @@
 # Secure Container Pipeline — a hardened container service shipped through a security-gated CI/CD pipeline on AWS
 
+> **Sep 2026 (v3 — supply chain):** **SLSA build provenance + SBOM attestations** (`actions/attest-*`) alongside the cosign signature, trivy's installer **pinned to v0.69.3** (it was fetched from `@main`, and trivy was compromised twice in March 2026 — CVE-2026-33634), **policy-as-code** in `policies/` wired into the same `.checkov.yaml` CI uses, and the task definition now pins `user = 10001` — a gap `CKV_SCP_1` found. 106 checkov checks pass.
+>
 > **Sep 2026:** fourth gate (pytest + mocked DynamoDB), SBOM, keyless cosign signing in a gated CD job, `/ready` vs `/health`, circuit-breaker rollback, autoscaling, optional TLS, and CodeDeploy blue/green with alarm-triggered rollback (validated, not applied).
 
 A small containerized API on AWS Fargate, deployed entirely by Terraform, shipped through a **CI/CD pipeline that refuses to merge insecure code** — Terraform misconfig scanning, container CVE + dependency scanning, and secrets scanning all block the build on findings.

@@ -49,8 +49,13 @@ resource "aws_ecs_task_definition" "app" {
   task_role_arn            = aws_iam_role.task.arn
 
   container_definitions = jsonencode([{
-    name                   = "app"
-    image                  = "${data.aws_ecr_repository.app.repository_url}:${var.image_tag}"
+    name  = "app"
+    image = "${data.aws_ecr_repository.app.repository_url}:${var.image_tag}"
+    # The Dockerfile sets USER appuser (uid 10001) and CI asserts it, but an image
+    # directive is only a default — a task definition can override it back to root
+    # and nothing in the old pipeline would have noticed. Pinning it here makes the
+    # runtime identity part of the reviewed infrastructure. Enforced by CKV_SCP_1.
+    user                   = "10001"
     essential              = true
     readonlyRootFilesystem = true # container can't write to its own filesystem
     portMappings = [{
