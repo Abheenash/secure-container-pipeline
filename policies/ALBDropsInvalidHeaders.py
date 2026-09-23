@@ -2,7 +2,7 @@
 request past the load balancer's own parsing. AWS gates this behind an
 attribute that defaults to false, so it has to be set explicitly.
 """
-from checkov.common.models.enums import CheckCategories, CheckResult
+from checkov.common.models.enums import CheckCategories
 from checkov.terraform.checks.resource.base_resource_value_check import BaseResourceValueCheck
 
 

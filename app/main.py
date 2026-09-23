@@ -62,7 +62,7 @@ async def request_context(request: Request, call_next):
     rid = request.headers.get("x-amzn-trace-id") or request.headers.get("x-request-id") or str(uuid.uuid4())
     try:
         response = await call_next(request)
-    except Exception:  # noqa: BLE001 — log, then let FastAPI turn it into a 500
+    except Exception:
         _log.info(json.dumps({"rid": rid, "method": request.method, "path": request.url.path,
                               "status": 500, "ms": round((time.time() - t0) * 1000, 1)}))
         raise

@@ -12,7 +12,7 @@ os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
 os.environ["AWS_ACCESS_KEY_ID"] = "testing"
 os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "app"))
-import main  # noqa: E402
+import main
 
 
 @pytest.fixture
@@ -94,7 +94,9 @@ def test_docs_are_disabled(client):
 
 
 def test_every_request_is_logged_as_json(client):
-    import io, json, logging
+    import io
+    import json
+    import logging
     buf = io.StringIO()
     h = logging.StreamHandler(buf)
     main._log.addHandler(h)
