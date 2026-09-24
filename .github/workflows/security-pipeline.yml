@@ -51,7 +51,7 @@ jobs:
           # reviewed baseline of accepted findings (public ALB, HTTP-only unless a cert is
           # supplied, AWS-managed keys, egress for VPC endpoints, no flow logs) — see .checkov.yaml
           additional_args: --exclude aws-cloudwatch-log-group-customer-key,aws-dynamodb-table-customer-key,aws-ec2-no-public-egress-sgr,aws-ec2-no-public-ingress-sgr,aws-ec2-require-vpc-flow-logs-for-all-vpcs,aws-elb-alb-not-public,aws-elb-http-not-used,aws-sns-topic-encryption-use-cmk,aws-ssm-secret-use-customer-key
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
       - run: terraform -chdir=terraform fmt -check -diff
       - run: terraform -chdir=terraform init -backend=false && terraform -chdir=terraform validate
 
@@ -60,7 +60,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with: { python-version: "3.13" }
       - run: pip install -r app/requirements.txt -r tests/requirements.txt
 
@@ -136,7 +136,7 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v7
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-east-1
@@ -169,7 +169,7 @@ jobs:
       # easy to demo; this is the half that actually answers "where did this
       # image come from?".
       - name: attest build provenance (SLSA, in-toto)
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-name: ${{ steps.ecr.outputs.registry }}/secure-container-pipeline
           subject-digest: ${{ steps.push.outputs.digest_only }}
@@ -187,7 +187,7 @@ jobs:
           trivy image --format cyclonedx --output sbom.release.cdx.json "${{ steps.push.outputs.digest }}"
 
       - name: attest the SBOM
-        uses: actions/attest-sbom@v3
+        uses: actions/attest-sbom@v4
         with:
           subject-name: ${{ steps.ecr.outputs.registry }}/secure-container-pipeline
           subject-digest: ${{ steps.push.outputs.digest_only }}
@@ -207,7 +207,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: terraform-linters/setup-tflint@v5
+      - uses: terraform-linters/setup-tflint@v6
         with:
           tflint_version: v0.64.0
       - name: tflint
@@ -224,7 +224,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
         with: { terraform_wrapper: false }
       - name: terraform test
         working-directory: ${{ github.workspace }}/terraform
@@ -276,7 +276,7 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/dependency-review-action@v4
+      - uses: actions/dependency-review-action@v5
         with:
           fail-on-severity: high
           comment-summary-in-pr: always
