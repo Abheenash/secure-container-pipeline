@@ -2,6 +2,14 @@
 
 > **Sep 2026 (v3 — supply chain):** **SLSA build provenance + SBOM attestations** (`actions/attest-*`) alongside the cosign signature, trivy's installer **pinned to v0.69.3** (it was fetched from `@main`, and trivy was compromised twice in March 2026 — CVE-2026-33634), **policy-as-code** in `policies/` wired into the same `.checkov.yaml` CI uses, and the task definition now pins `user = 10001` — a gap `CKV_SCP_1` found. 106 checkov checks pass.
 >
+> **Sep 2026 (v3):** the API test suite now also runs against **`amazon/dynamodb-local`** —
+> the engine AWS ships for offline use, free and account-free — alongside the moto tests.
+> The application needed no change for this: botocore honours `AWS_ENDPOINT_URL_DYNAMODB`
+> natively, so there is no test-only code path. Recorded honestly in the suite's docstring:
+> moto agreed with the real engine on every behaviour probed, so the value is that the
+> agreement is now checked rather than assumed. CI sets `REQUIRE_DDB=1` so a container that
+> fails to start errors instead of skipping six tests behind a green tick.
+>
 > **Sep 2026:** fourth gate (pytest + mocked DynamoDB), SBOM, keyless cosign signing in a gated CD job, `/ready` vs `/health`, circuit-breaker rollback, autoscaling, optional TLS, and CodeDeploy blue/green with alarm-triggered rollback (validated, not applied).
 
 A small containerized API on AWS Fargate, deployed entirely by Terraform, shipped through a **CI/CD pipeline that refuses to merge insecure code** — Terraform misconfig scanning, container CVE + dependency scanning, and secrets scanning all block the build on findings.
@@ -12,7 +20,7 @@ A small containerized API on AWS Fargate, deployed entirely by Terraform, shippe
 
 | Area | Before | Now |
 | --- | --- | --- |
-| Gates | 3 (gitleaks, checkov + tfsec, trivy) | **4** — plus the app's own **pytest suite against a moto-mocked DynamoDB** (9 tests: readiness vs liveness, CRUD, validation, pagination bounds, security headers, JSON request logs, docs disabled). Terraform `fmt`/`validate` also gate. |
+| Gates | 3 (gitleaks, checkov + tfsec, trivy) | **4** — plus the app's own **pytest suite: 10 tests against a moto-mocked DynamoDB and 6 against a real `amazon/dynamodb-local`** (readiness vs liveness, CRUD, validation, pagination across a real page boundary, reserved-word expressions, conditional-write error codes, security headers, JSON request logs, docs disabled). Terraform `fmt`/`validate` also gate. |
 | Supply chain | CVE scan | CVE scan **+ secret scan of the image layers + CycloneDX SBOM** uploaded as a build artifact **+ non-root assertion** (the pipeline fails if the container doesn't run as uid 10001) |
 | Delivery | manual `terraform apply` | a **CD job** on `main` (gated by a `DEPLOY_ENABLED` repo variable so the torn-down demo doesn't fail): OIDC → ECR push (amd64) → **keyless cosign signature by digest** → verify → `ecs update-service`. Dependabot for pip, Docker, Actions and Terraform. |
 | App | `/health` used for everything | `/health` = liveness (never touches AWS); **`/ready` = DynamoDB reachable** and is what the ALB target group checks. Input bounds (1–4000 chars), cursor pagination with a 100-item cap, `DELETE`, security headers, one JSON log line per request with the ALB trace id. OpenAPI/docs endpoints disabled. |

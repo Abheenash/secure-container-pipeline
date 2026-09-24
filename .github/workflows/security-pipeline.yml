@@ -56,14 +56,37 @@ jobs:
       - run: terraform -chdir=terraform init -backend=false && terraform -chdir=terraform validate
 
   unit-tests:
-    name: pytest (app, mocked DynamoDB)
+    name: pytest (moto + real DynamoDB Local)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with: { python-version: "3.13" }
       - run: pip install -r app/requirements.txt -r tests/requirements.txt
+
+      # The engine AWS ships for offline use — same wire protocol and error codes
+      # as the service, no account, no cost. Started with `docker run` rather than
+      # a `services:` block because the image needs its own arguments (-inMemory
+      # -sharedDb) and service containers cannot override a CMD.
+      - name: start DynamoDB Local
+        run: |
+          docker run -d --name ddb-local -p 8000:8000 amazon/dynamodb-local:3.1.0 \
+            -jar DynamoDBLocal.jar -inMemory -sharedDb
+          for _ in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000 || true)
+            case "$code" in 2*|4*) echo "DynamoDB Local is up"; exit 0;; esac
+            sleep 1
+          done
+          echo "::error::DynamoDB Local never became reachable"; docker logs ddb-local; exit 1
+
+      # REQUIRE_DDB=1 makes a missing endpoint an error rather than a skip. Without
+      # it, a container that failed to start would skip six tests and still go green.
       - run: python -m pytest tests -q
+        env:
+          REQUIRE_DDB: "1"
+
+      - if: always()
+        run: docker rm -f ddb-local || true
 
   image-scan:
     name: trivy (image + deps) + SBOM
