@@ -1,5 +1,38 @@
 # Secure Container Pipeline — a hardened container service shipped through a security-gated CI/CD pipeline on AWS
 
+A small containerized API on AWS Fargate, provisioned entirely by Terraform and shipped through
+a **CI/CD pipeline that refuses to merge work which fails a security gate**.
+
+### The 30-second version
+
+Four gates fail the build — secret scanning, infrastructure scanning, image and dependency
+scanning, and the app's own tests. The claim that they actually stop things is not an assertion:
+
+> **[PR #1](https://github.com/Abheenash/secure-container-pipeline/pull/1) carried a deliberately
+> planted AWS access key and was blocked by two of the gates independently.** The pull request is
+> still open in the repo so you can read what each gate said.
+
+Two findings from this repo that are worth more than the green ticks:
+
+**The container ships without a package installer, and that fix used to fail silently.** A
+production container has no business carrying `pip` — and `pip` vendors its own copies of other
+libraries, which is where the scanner kept finding vulnerabilities that upgrading *our*
+dependencies could never fix. The instruction removing it pointed at a hardcoded folder named
+after the Python version. Bump the base image, the folder name changes, `rm -rf` matches nothing,
+**succeeds silently**, and the vulnerabilities come back with a green build. It now derives the
+path from the interpreter and fails the build if anything survives.
+
+**The tests run against a real database engine, and the honest result is that the mock was
+right.** The suite runs twice: once against a mocked DynamoDB, once against `amazon/dynamodb-local`
+— the engine AWS ships for offline use, free and account-free. The mock agreed with the real engine
+on every behaviour probed. That is written in the suite's own docstring rather than dressed up: the
+value is that the agreement is now *checked* rather than assumed, and that request signing and the
+wire protocol get exercised for real. CI sets `REQUIRE_DDB=1` so a container that fails to start
+errors out instead of quietly skipping six tests behind a green tick.
+
+<details>
+<summary><b>Version history</b></summary>
+
 > **Sep 2026 (v3 — supply chain):** **SLSA build provenance + SBOM attestations** (`actions/attest-*`) alongside the cosign signature, trivy's installer **pinned to v0.69.3** (it was fetched from `@main`, and trivy was compromised twice in March 2026 — CVE-2026-33634), **policy-as-code** in `policies/` wired into the same `.checkov.yaml` CI uses, and the task definition now pins `user = 10001` — a gap `CKV_SCP_1` found. 106 checkov checks pass.
 >
 > **Sep 2026 (v3):** the API test suite now also runs against **`amazon/dynamodb-local`** —
@@ -12,7 +45,10 @@
 >
 > **Sep 2026:** fourth gate (pytest + mocked DynamoDB), SBOM, keyless cosign signing in a gated CD job, `/ready` vs `/health`, circuit-breaker rollback, autoscaling, optional TLS, and CodeDeploy blue/green with alarm-triggered rollback (validated, not applied).
 
-A small containerized API on AWS Fargate, deployed entirely by Terraform, shipped through a **CI/CD pipeline that refuses to merge insecure code** — Terraform misconfig scanning, container CVE + dependency scanning, and secrets scanning all block the build on findings.
+</details>
+
+---
+
 
 **Status:** ✅ All stages complete — DevSecOps pipeline **enforced on `main`**, a bad PR proven blocked ([docs/stage5.md](docs/stage5.md)). See the [architecture diagram](docs/architecture.md).
 
