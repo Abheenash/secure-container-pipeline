@@ -44,7 +44,7 @@ flowchart TB
 
 ## Security posture
 
-- **Nothing insecure merges** — three fail-the-build gates on every PR.
+- **Insecure code fails the build** — four gates on every push and pull request. They report rather than prevent: `main` is not branch-protected (see [stage5.md](stage5.md)).
 - **No long-lived credentials** — CI authenticates to AWS via GitHub OIDC.
 - **No public egress** — private subnets + VPC endpoints (no NAT).
 - **App is never internet-reachable** — only the ALB (behind WAF) is public.

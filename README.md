@@ -1,7 +1,8 @@
 # Secure Container Pipeline — a hardened container service shipped through a security-gated CI/CD pipeline on AWS
 
 A small containerized API on AWS Fargate, provisioned entirely by Terraform and shipped through
-a **CI/CD pipeline that refuses to merge work which fails a security gate**.
+a **CI/CD pipeline whose security gates fail the build** — secret scanning, infrastructure
+scanning, image and dependency scanning, and the app's own tests.
 
 ### The 30-second version
 
@@ -50,7 +51,19 @@ errors out instead of quietly skipping six tests behind a green tick.
 ---
 
 
-**Status:** ✅ All stages complete — DevSecOps pipeline **enforced on `main`**, a bad PR proven blocked ([docs/stage5.md](docs/stage5.md)). See the [architecture diagram](docs/architecture.md).
+**Status:** ✅ All stages complete. The gates run on every push and pull request and fail the
+build when they find something — [PR #1](https://github.com/Abheenash/secure-container-pipeline/pull/1)
+is the proof, blocked by two of them independently ([write-up](docs/stage5.md)).
+
+> **On branch protection.** This repo previously required those four checks to pass before a
+> merge, and `docs/stage5.md` describes PR #1 being blocked by exactly that rule. The requirement
+> has since been removed so all sixteen of my repositories behave the same way — I work on these
+> alone and was overriding it on every push, which makes a required check a formality rather than
+> a control. The gates themselves are unchanged: they still run, still fail, and a red build is
+> still a red build. What is gone is the server-side rule that *prevented* the merge. That is a
+> real difference and it is stated here rather than left for someone to discover.
+
+See the [architecture diagram](docs/architecture.md).
 
 ## v2 — what changed (Sep 2026)
 
@@ -75,7 +88,8 @@ The pipeline runs are public — click straight through to the real thing:
 - ✅ **The pipeline passing on `main`** — [green run](https://github.com/Abheenash/secure-container-pipeline/actions/runs/28985555459) (all three gates pass).
 - 🗺️ **[Architecture diagram](docs/architecture.md)** — the pipeline gates and the runtime.
 
-`main` is branch-protected: a PR can't merge until all four gates pass.
+All four gates run on every push and pull request and fail the build when they find
+something. `main` is no longer branch-protected — see the note above for why.
 
 ## Why this project
 
@@ -115,7 +129,7 @@ Developer ──push/PR──> GitHub
 ## How it works
 
 1. A push or PR triggers GitHub Actions, which runs three security gates — **no AWS credentials needed** (the gates only read code).
-2. The gates: **Checkov/tfsec** on the Terraform, **Trivy** for image CVEs and dependency (SCA) issues, and **gitleaks** for secrets. Any HIGH/CRITICAL finding fails the build; `main` is branch-protected, so nothing merges until all three pass.
+2. The gates: **Checkov/tfsec** on the Terraform, **Trivy** for image CVEs and dependency (SCA) issues, and **gitleaks** for secrets. Any HIGH/CRITICAL finding fails the build.
 3. Deployment is **manual** in this project (`terraform apply`). A future CD job can assume the pre-created **OIDC** role to deploy on merge — no static keys anywhere.
 4. The API runs on **Fargate in private subnets**, reachable only through the ALB. Data lives in **DynamoDB**; secrets come from **Secrets Manager** at runtime — never from the image or an env file.
 5. **CloudWatch** collects logs and alarms on errors.

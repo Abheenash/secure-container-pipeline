@@ -37,7 +37,7 @@ Two design choices matter here. First, **keyless CI**: the security gates need n
 
 Second, **the reviewed baseline is honest, not a mute button**. Scanners are noisy on a full VPC/ALB/ECS stack. Rather than blanket-silencing them, I fixed what was cheap and real (DynamoDB SSE + PITR, SNS encryption, log retention, Container Insights, dropped invalid headers, SG rule descriptions, WAF rules) and *documented-and-accepted* the rest, each with a written one-line reason in `.checkov.yaml` — public ALB (it's the entry point), HTTP-only (no domain/cert for the demo), AWS-managed keys instead of CMKs, egress needed to reach the VPC endpoints, no flow logs. Any *new* category of misconfiguration not on the baseline still fails the build.
 
-Enforcement is the last piece: `main` is branch-protected in `strict` mode, requiring all three status checks to pass before a PR can merge. The gates aren't advisory — they're a wall.
+Enforcement was the last piece: `main` carried branch protection in `strict` mode, requiring the status checks to pass before a PR could merge — and that is what produced the `BLOCKED` state on PR #1 below. That rule has since been removed, because I am the only person working on these repos and every push of mine was overriding it with admin rights; a required check that its only user routinely bypasses is a formality, not a control. The gates are unchanged and still fail the build. What is gone is the server-side rule that *prevented* the merge.
 
 ## Proof it works
 
@@ -50,6 +50,8 @@ The headline proof (`docs/stage5.md`) is a pull request (`#1`) that added a file
 | checkov + tfsec (IaC) | passed (no new misconfig) |
 
 With branch protection requiring all three checks, the PR's merge state became `BLOCKED` — the credentials could not reach `main`. The PR was closed, not merged. The pipeline runs are public: the failing run and the green-on-`main` run are both linked from the README.
+
+> Written in the past tense on purpose: that branch-protection rule has since been removed, so the gates now report rather than prevent. The run above happened exactly as described and [PR #1](https://github.com/Abheenash/secure-container-pipeline/pull/1) is still open to read. `docs/stage5.md` explains why the rule went.
 
 That's the whole project in one screenshot: insecure code doesn't get in — and it was two *different* tools catching the same leak, which is exactly the defense-in-depth the pipeline is supposed to provide.
 
