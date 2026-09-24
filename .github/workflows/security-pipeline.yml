@@ -18,7 +18,7 @@ jobs:
     name: gitleaks (secrets)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
       - name: gitleaks (secrets)
@@ -34,24 +34,24 @@ jobs:
     name: checkov + tfsec (terraform)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       # external-checks-dir loads policies/ — this repo's own policy-as-code, on
       # top of checkov's built-ins. CKV_SCP_1 exists because the pipeline used to
       # assert the image's uid but nothing asserted the task definition couldn't
       # override it back to root.
       - name: checkov (built-in + this repo's policies)
-        uses: bridgecrewio/checkov-action@v12
+        uses: bridgecrewio/checkov-action@444c9db6fa75e2d9c19ebf1fde7322089be9009e # v12
         with:
           directory: terraform
           config_file: .checkov.yaml
       - name: tfsec
-        uses: aquasecurity/tfsec-action@v1.0.3
+        uses: aquasecurity/tfsec-action@b466648d6e39e7c75324f25d83891162a721f2d6 # v1.0.3
         with:
           working_directory: terraform
           # reviewed baseline of accepted findings (public ALB, HTTP-only unless a cert is
           # supplied, AWS-managed keys, egress for VPC endpoints, no flow logs) — see .checkov.yaml
           additional_args: --exclude aws-cloudwatch-log-group-customer-key,aws-dynamodb-table-customer-key,aws-ec2-no-public-egress-sgr,aws-ec2-no-public-ingress-sgr,aws-ec2-require-vpc-flow-logs-for-all-vpcs,aws-elb-alb-not-public,aws-elb-http-not-used,aws-sns-topic-encryption-use-cmk,aws-ssm-secret-use-customer-key
-      - uses: hashicorp/setup-terraform@v4
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
       - run: terraform -chdir=terraform fmt -check -diff
       - run: terraform -chdir=terraform init -backend=false && terraform -chdir=terraform validate
 
@@ -59,8 +59,8 @@ jobs:
     name: pytest (moto + real DynamoDB Local)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with: { python-version: "3.13" }
       - run: pip install -r app/requirements.txt -r tests/requirements.txt
 
@@ -81,7 +81,7 @@ jobs:
 
       # REQUIRE_DDB=1 makes a missing endpoint an error rather than a skip. Without
       # it, a container that failed to start would skip six tests and still go green.
-      - run: python -m pytest tests -q
+      - run: python -m pytest tests -q --cov --cov-report=term-missing
         env:
           REQUIRE_DDB: "1"
 
@@ -92,7 +92,7 @@ jobs:
     name: trivy (image + deps) + SBOM
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: build image
         run: docker build -t scp:ci .
       # Pinned, not @main. The trivy supply chain was compromised twice in March
@@ -112,7 +112,7 @@ jobs:
         run: trivy image --scanners secret --exit-code 1 scp:ci
       - name: generate SBOM (CycloneDX)
         run: trivy image --format cyclonedx --output sbom.cdx.json scp:ci
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: sbom
           path: sbom.cdx.json
@@ -135,12 +135,12 @@ jobs:
       attestations: write  # required by actions/attest-*
       packages: write
     steps:
-      - uses: actions/checkout@v7
-      - uses: aws-actions/configure-aws-credentials@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-east-1
-      - uses: aws-actions/amazon-ecr-login@v2
+      - uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2
         id: ecr
       - name: build and push (amd64 — Fargate's architecture)
         id: push
@@ -153,7 +153,7 @@ jobs:
           echo "digest=$DIGEST_REF" >> "$GITHUB_OUTPUT"
           # attest-* want the bare sha256:... , cosign wants the full repo@sha256:...
           echo "digest_only=${DIGEST_REF#*@}" >> "$GITHUB_OUTPUT"
-      - uses: sigstore/cosign-installer@v3
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
       - name: sign the image by digest (keyless, GitHub OIDC identity)
         run: cosign sign --yes "${{ steps.push.outputs.digest }}"
       - name: verify the signature we just made
@@ -169,7 +169,7 @@ jobs:
       # easy to demo; this is the half that actually answers "where did this
       # image come from?".
       - name: attest build provenance (SLSA, in-toto)
-        uses: actions/attest-build-provenance@v4
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
           subject-name: ${{ steps.ecr.outputs.registry }}/secure-container-pipeline
           subject-digest: ${{ steps.push.outputs.digest_only }}
@@ -187,7 +187,7 @@ jobs:
           trivy image --format cyclonedx --output sbom.release.cdx.json "${{ steps.push.outputs.digest }}"
 
       - name: attest the SBOM
-        uses: actions/attest-sbom@v4
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4
         with:
           subject-name: ${{ steps.ecr.outputs.registry }}/secure-container-pipeline
           subject-digest: ${{ steps.push.outputs.digest_only }}
@@ -206,8 +206,8 @@ jobs:
     name: tflint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: terraform-linters/setup-tflint@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: terraform-linters/setup-tflint@1cf010d3c7aef302051ccdb68c14c5dc2efa34ef # v6
         with:
           tflint_version: v0.64.0
       - name: tflint
@@ -232,8 +232,8 @@ jobs:
     name: terraform test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: hashicorp/setup-terraform@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
         with: { terraform_wrapper: false }
       - name: terraform test
         working-directory: ${{ github.workspace }}/terraform
@@ -248,8 +248,8 @@ jobs:
     name: ruff
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: astral-sh/ruff-action@v3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: astral-sh/ruff-action@4919ec5cf1f49eff0871dbcea0da843445b837e6 # v3
         with:
           version: 0.16.8
           args: check --output-format github
@@ -263,12 +263,12 @@ jobs:
       security-events: write
       contents: read
     steps:
-      - uses: actions/checkout@v7
-      - uses: github/codeql-action/init@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
         with:
           languages: python
           queries: security-and-quality
-      - uses: github/codeql-action/analyze@v4
+      - uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
 
   # Blocks a PR that introduces a dependency with a known vulnerability or a
   # licence that does not fit. Renovate keeps things current; this stops a bad
@@ -284,8 +284,8 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/dependency-review-action@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: high
           comment-summary-in-pr: always
